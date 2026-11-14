@@ -1078,6 +1078,89 @@ describe("useTerminalReview", () => {
     }
   });
 
+  test("session note summaries keep a note on a file the single-file view is not showing", async () => {
+    const { controllerRef, setup } = await renderTerminalReview(
+      [
+        createDiffFile(
+          "alpha",
+          "alpha.ts",
+          "export const alpha = 1;\n",
+          "export const alpha = 2;\n",
+          {
+            path: "alpha.ts",
+            annotations: [
+              {
+                id: "ai:alpha",
+                source: "ai",
+                summary: "Note on the file the view is not showing.",
+                newRange: [1, 1],
+              },
+            ],
+          },
+        ),
+        createDiffFile("beta", "beta.ts", "export const beta = 1;\n", "export const beta = 2;\n"),
+      ],
+      {
+        presentationScope: {
+          generation: "generation-1",
+          files: [{ fileId: "beta", hunkIndexes: [0] }],
+        },
+      },
+    );
+
+    try {
+      await flush(setup);
+      await act(async () => {
+        expectValue(controllerRef.current).selectFile("beta");
+      });
+      await flush(setup);
+
+      const viewed = expectValue(controllerRef.current);
+      expect(viewed.visibleFiles.map((file) => file.id)).toEqual(["beta"]);
+      expect(viewed.selectedFile?.id).toBe("beta");
+      expect(viewed.reviewNoteSummaries).toContainEqual(
+        expect.objectContaining({
+          noteId: "ai:alpha",
+          filePath: "alpha.ts",
+          body: "Note on the file the view is not showing.",
+        }),
+      );
+
+      let savedNoteId = "";
+      await act(async () => {
+        const controller = expectValue(controllerRef.current);
+        controller.startUserNote("alpha", 0, { side: "new", line: 1 });
+        controller.updateDraftNote("Saved on the other file.");
+        savedNoteId = controller.saveDraftNote()?.id ?? "";
+        controller.selectFile("beta");
+        controller.setFilter("beta");
+      });
+      await flush(setup);
+
+      const after = expectValue(controllerRef.current);
+      expect(savedNoteId).toStartWith("user:");
+      expect(after.selectedFile?.id).toBe("beta");
+      expect(after.visibleFiles.map((file) => file.id)).toEqual(["beta"]);
+      expect(after.reviewNoteSummaries).toContainEqual(
+        expect.objectContaining({
+          noteId: savedNoteId,
+          source: "user",
+          filePath: "alpha.ts",
+          body: "Saved on the other file.",
+        }),
+      );
+      expect(after.reviewNoteCount).toBe(after.reviewNoteSummaries.length);
+      expect(after.reviewNoteSummaries.map((note) => note.filePath).sort()).toEqual([
+        "alpha.ts",
+        "alpha.ts",
+      ]);
+    } finally {
+      await act(async () => {
+        setup.renderer.destroy();
+      });
+    }
+  });
+
   test("sidecar annotations are exposed as AI review notes", async () => {
     const controllerRef: { current: TerminalReview | null } = { current: null };
     const setup = await testRender(

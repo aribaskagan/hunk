@@ -1836,7 +1836,14 @@ export function useTerminalReview({
     [runIntent],
   );
 
-  /** Format current inline notes for daemon snapshots without exposing UI-only objects. */
+  /**
+   * Format current inline notes for daemon snapshots without exposing UI-only objects.
+   *
+   * Walk every file in the review. A file filter or a single-file presentation scope changes
+   * only what the terminal draws. These summaries are what `hunk session review --include-notes`
+   * and `hunk session comment list` publish, so a note on a file that is not selected stays
+   * in the list.
+   */
   const reviewNoteSummaries = useMemo<SessionReviewNoteSummary[]>(() => {
     const noteSummaries: SessionReviewNoteSummary[] = [];
 

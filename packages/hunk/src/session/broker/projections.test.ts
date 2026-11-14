@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createTestSessionLiveComment,
   createTestSessionRegistration,
+  createTestSessionReviewFile,
   createTestSessionSnapshot,
 } from "../../../../../test/helpers/session-daemon-fixtures";
 import {
@@ -94,6 +95,47 @@ describe("hunk session projections", () => {
 
     const withPatch = buildHunkSessionReview(entry, { includePatch: true });
     expect(withPatch.files[0]).toEqual(expect.objectContaining({ patch: "@@ -1,1 +1,1 @@" }));
+  });
+
+  test("buildHunkSessionReview keeps every file and a note on a non-selected file", () => {
+    const alpha = createTestSessionReviewFile({
+      id: "alpha",
+      path: "alpha.ts",
+    });
+    const beta = createTestSessionReviewFile({
+      id: "beta",
+      path: "beta.ts",
+    });
+    const entry = {
+      registration: createTestSessionRegistration({ files: [alpha, beta] }),
+      snapshot: createTestSessionSnapshot({
+        selectedFileId: "beta",
+        selectedFilePath: "beta.ts",
+        reviewNoteCount: 1,
+        reviewNotes: [
+          {
+            noteId: "user:alpha",
+            source: "user" as const,
+            filePath: "alpha.ts",
+            body: "Note on the file the view is not showing.",
+            createdAt: "2026-05-10T00:00:00.000Z",
+            editable: true,
+          },
+        ],
+      }),
+    };
+
+    const review = buildHunkSessionReview(entry, { includeNotes: true });
+
+    expect(review.selectedFile?.path).toBe("beta.ts");
+    expect(review.files.map((file) => file.path)).toEqual(["alpha.ts", "beta.ts"]);
+    expect(review.reviewNoteCount).toBe(1);
+    expect(review.reviewNotes).toEqual([
+      expect.objectContaining({ noteId: "user:alpha", filePath: "alpha.ts" }),
+    ]);
+    expect(listHunkSessionNotes(buildListedHunkSession(entry))).toEqual([
+      expect.objectContaining({ noteId: "user:alpha", filePath: "alpha.ts" }),
+    ]);
   });
 
   test("buildHunkSessionReview can include live review notes on demand", () => {
